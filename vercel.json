@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "builds": [{ "src": "api/process.py", "use": "@vercel/python" }, { "src": "app", "use": "@vercel/next" }],
+  "routes": [{ "src": "/api/(.*)", "dest": "/api/process.py" }, { "src": "/(.*)", "dest": "/app.js" }],
+  "env": {
+    "OPENAI_API_KEY": "@openai_api_key"
+  }
+}
