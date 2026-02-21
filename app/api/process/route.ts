@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     console.log("[v0] Image media type:", mediaType)
 
     try {
-      console.log("[v0] Calling Google Gemini Vision API for text extraction...")
+      console.log("[v0] Calling Google Gemini Vision API for text extraction and simplification...")
       const visionResponse = await fetch(
         `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
         {
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
               {
                 parts: [
                   {
-                    text: "Extract all the text from this handwritten image. Return ONLY the extracted text without any explanations.",
+                    text: "Extract all the text from this handwritten image. Then simplify, fix OCR errors, improve punctuation, and correct spelling mistakes. Format as clear, readable notes. Return the output in this exact format:\n\nRAW TEXT:\n[extracted text here]\n\nSIMPLIFIED TEXT:\n[simplified text here]",
                   },
                   {
                     inlineData: {
@@ -77,65 +77,29 @@ export async function POST(request: NextRequest) {
       const visionData = await visionResponse.json()
       console.log("[v0] Vision response received")
 
-      let raw_text = ""
+      let responseText = ""
       if (
         visionData.candidates &&
         visionData.candidates[0] &&
         visionData.candidates[0].content &&
         visionData.candidates[0].content.parts
       ) {
-        raw_text = visionData.candidates[0].content.parts.map((part: any) => part.text || "").join("")
+        responseText = visionData.candidates[0].content.parts.map((part: any) => part.text || "").join("")
       }
 
-      if (!raw_text) {
+      if (!responseText) {
         throw new Error("Could not extract text from image")
       }
 
-      console.log("[v0] Extracted text length:", raw_text.length)
+      // Parse the response to extract raw and simplified text
+      const rawMatch = responseText.match(/RAW TEXT:\n([\s\S]*?)(?=\n\nSIMPLIFIED TEXT:|$)/i)
+      const simplifiedMatch = responseText.match(/SIMPLIFIED TEXT:\n([\s\S]*?)$/i)
 
-      console.log("[v0] Calling Google Gemini API for text simplification...")
-      const simplifyResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                    text: `You are a helpful assistant that simplifies and cleans up handwritten text. Fix OCR errors, improve punctuation, correct spelling mistakes, and format as clear, readable notes.\n\nSimplify this text:\n\n${raw_text}`,
-                  },
-                ],
-              },
-            ],
-          }),
-        },
-      )
+      const raw_text = rawMatch ? rawMatch[1].trim() : responseText
+      const simplified_text = simplifiedMatch ? simplifiedMatch[1].trim() : raw_text
 
-      if (!simplifyResponse.ok) {
-        const errorData = await simplifyResponse.json()
-        console.error("[v0] Simplify API error response:", errorData)
-        throw new Error(`Simplification failed: ${JSON.stringify(errorData)}`)
-      }
-
-      const simplifyData = await simplifyResponse.json()
-      console.log("[v0] Simplification complete")
-
-      let simplified_text = ""
-      if (
-        simplifyData.candidates &&
-        simplifyData.candidates[0] &&
-        simplifyData.candidates[0].content &&
-        simplifyData.candidates[0].content.parts
-      ) {
-        simplified_text = simplifyData.candidates[0].content.parts.map((part: any) => part.text || "").join("")
-      }
-
-      if (!simplified_text) {
-        throw new Error("Could not simplify text")
+      if (!raw_text) {
+        throw new Error("Could not extract text from image")
       }
 
       console.log("[v0] Success: Returning results")
